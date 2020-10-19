@@ -61,6 +61,7 @@ namespace NetworkObjects
     public class NetworkPlayer : NetworkObject{
         public Color cubeColor;
         public Vector3 cubPos;
+        public GameObject cube;
 
         public NetworkPlayer(){
             cubeColor = new Color();

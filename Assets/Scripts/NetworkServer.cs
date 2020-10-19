@@ -5,12 +5,17 @@ using Unity.Networking.Transport;
 using NetworkMessages;
 using System;
 using System.Text;
+using System.Collections;
+using System.Collections.Generic;
+using NetworkObjects;
 
 public class NetworkServer : MonoBehaviour
 {
     public NetworkDriver m_Driver;
     public ushort serverPort;
+    public GameObject playerObject;
     private NativeList<NetworkConnection> m_Connections;
+    public Dictionary<string, NetworkObjects.NetworkPlayer> clientPlayers = new Dictionary<string, NetworkObjects.NetworkPlayer>();
 
     void Start ()
     {
@@ -23,8 +28,28 @@ public class NetworkServer : MonoBehaviour
             m_Driver.Listen();
 
         m_Connections = new NativeList<NetworkConnection>(16, Allocator.Persistent);
+
+        StartCoroutine(SendPlayerUpdateToAllClients());
     }
 
+    IEnumerator SendPlayerUpdateToAllClients()
+    {
+        while (true)
+        {
+            ServerUpdateMsg m = new ServerUpdateMsg();
+            foreach (KeyValuePair<string, NetworkObjects.NetworkPlayer> client in clientPlayers)
+            {
+                m.players.Add(client.Value);
+
+            }
+            for (int i = 0; i < m_Connections.Length; i++)
+            {
+               SendToClient(JsonUtility.ToJson(m), m_Connections[i]);
+
+            }
+            yield return new WaitForSeconds(0.5f);
+        }
+    }
     void SendToClient(string message, NetworkConnection c){
         var writer = m_Driver.BeginSend(NetworkPipeline.Null, c);
         NativeArray<byte> bytes = new NativeArray<byte>(Encoding.ASCII.GetBytes(message),Allocator.Temp);
@@ -40,11 +65,12 @@ public class NetworkServer : MonoBehaviour
     void OnConnect(NetworkConnection c){
         m_Connections.Add(c);
         Debug.Log("Accepted a connection");
-
         //// Example to send a handshake message:
-        // HandshakeMsg m = new HandshakeMsg();
-        // m.player.id = c.InternalId.ToString();
-        // SendToClient(JsonUtility.ToJson(m),c);        
+        HandshakeMsg m = new HandshakeMsg();
+        m.player.id = c.InternalId.ToString();
+        SendToClient(JsonUtility.ToJson(m), c);
+
+        clientPlayers.Add(c.InternalId.ToString(), new NetworkObjects.NetworkPlayer());
     }
 
     void OnData(DataStreamReader stream, int i){
@@ -60,6 +86,7 @@ public class NetworkServer : MonoBehaviour
             break;
             case Commands.PLAYER_UPDATE:
             PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
+                PlayerUpdate(puMsg);
             Debug.Log("Player update message received!");
             break;
             case Commands.SERVER_UPDATE:
@@ -70,6 +97,12 @@ public class NetworkServer : MonoBehaviour
             Debug.Log("SERVER ERROR: Unrecognized message received!");
             break;
         }
+    }
+
+    void PlayerUpdate(PlayerUpdateMsg puMsg)
+    {
+        clientPlayers[puMsg.player.id].cubPos = puMsg.player.cubPos;
+        clientPlayers[puMsg.player.id].cubeColor = puMsg.player.cubeColor;
     }
 
     void OnDisconnect(int i){

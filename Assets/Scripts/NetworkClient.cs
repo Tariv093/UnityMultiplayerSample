@@ -5,6 +5,9 @@ using NetworkMessages;
 using NetworkObjects;
 using System;
 using System.Text;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEditor;
 
 public class NetworkClient : MonoBehaviour
 {
@@ -12,6 +15,10 @@ public class NetworkClient : MonoBehaviour
     public NetworkConnection m_Connection;
     public string serverIP;
     public ushort serverPort;
+    public GameObject prefab;
+    public Dictionary<string, GameObject> playerList = new Dictionary<string, GameObject>();
+    public List<string> playerIDs;
+    public string newID= null;
 
     
     void Start ()
@@ -31,13 +38,50 @@ public class NetworkClient : MonoBehaviour
 
     void OnConnect(){
         Debug.Log("We are now connected to the server");
+        StartCoroutine(SendRepeatUpdate());
+        ////// Example to send a handshake message:
+        //HandshakeMsg m = new HandshakeMsg();
+        //m.player.id = m_Connection.InternalId.ToString();
+        //m.player.cubPos = new Vector3(0, 0, 0);
+        //m.player.cube = Instantiate(prefab);
+        //playerObject = m.player.cube;
+        //Renderer renderer = m.player.cube.GetComponent<Renderer>();
+        //renderer.material.color = new Color(UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f), 1);
+        //foreach(string s in playerIDs)
+        //{
+        //    if (s == null)
+        //    { }
+        //    else if(!playerList.ContainsKey(s))
+        //    {
+        //        playerList.Add(s, Instantiate(prefab, new Vector3(0,0,0), Quaternion.identity));
+               
+        //    }
+        //}
 
-        //// Example to send a handshake message:
-        // HandshakeMsg m = new HandshakeMsg();
-        // m.player.id = m_Connection.InternalId.ToString();
+        //SendToServer(JsonUtility.ToJson(m));
         // SendToServer(JsonUtility.ToJson(m));
     }
 
+    IEnumerator SendRepeatUpdate()
+    {
+        while(true)
+        {
+            
+            yield return new WaitForSeconds(0.5f);
+            if(!playerList.ContainsKey(newID)||playerList[newID] == null)
+            {
+                yield return new WaitForSeconds(0.5f);
+            }
+            PlayerUpdateMsg m = new PlayerUpdateMsg();
+            m.player.id = newID;
+            m.player.cube = playerList[newID];
+            m.player.cubPos = playerList[newID].transform.position;
+            Renderer renderer = m.player.cube.GetComponent<Renderer>();
+            renderer.material.color = new Color(UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f), UnityEngine.Random.Range(0f, 1f), 1);
+
+            SendToServer(JsonUtility.ToJson(m));
+        }
+    }
     void OnData(DataStreamReader stream){
         NativeArray<byte> bytes = new NativeArray<byte>(stream.Length,Allocator.Temp);
         stream.ReadBytes(bytes);
@@ -47,6 +91,8 @@ public class NetworkClient : MonoBehaviour
         switch(header.cmd){
             case Commands.HANDSHAKE:
             HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
+            newID = hsMsg.player.id;
+            playerList.Add(newID, Instantiate(prefab));    
             Debug.Log("Handshake message received!");
             break;
             case Commands.PLAYER_UPDATE:
@@ -55,12 +101,32 @@ public class NetworkClient : MonoBehaviour
             break;
             case Commands.SERVER_UPDATE:
             ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
+            UpdateCube(suMsg);
             Debug.Log("Server update message received!");
             break;
             default:
             Debug.Log("Unrecognized message received!");
             break;
         }
+    }
+
+     void UpdateCube(ServerUpdateMsg suMsg)
+    {
+        Debug.Log("Number of clients" + suMsg.players.Count);
+       for(int i = 0; i < suMsg.players.Count; i++)
+        {
+            if(!playerList.ContainsKey(suMsg.players[i].id))
+            {
+                playerList.Add(suMsg.players[i].id, Instantiate(prefab));
+                Debug.Log("adding new player");
+            }
+            if(suMsg.players[i].id != newID)
+            {
+                playerList[suMsg.players[i].id].transform.position = suMsg.players[i].cubPos;
+                playerList[suMsg.players[i].id].GetComponent<Renderer>().material.color = suMsg.players[i].cubeColor;
+            }
+        }
+       
     }
 
     void Disconnect(){
@@ -85,7 +151,30 @@ public class NetworkClient : MonoBehaviour
         {
             return;
         }
-
+        if (Input.GetKey("w"))
+        {
+            //use jsons to translate your position to serverside, which will then translate the player in a direction
+            //translate
+            playerList[newID].transform.Translate(new Vector3(0, 1 * Time.deltaTime, 0));
+        }
+        if (Input.GetKey("s"))
+        {
+            //use jsons to translate your position to serverside, which will then translate the player in a direction
+            //translate
+            playerList[newID].transform.Translate(new Vector3(0, -1 * Time.deltaTime, 0));
+        }
+        if (Input.GetKey("a"))
+        {
+            //use jsons to translate your position to serverside, which will then translate the player in a direction
+            //translate
+            playerList[newID].transform.Translate(new Vector3( 1 * Time.deltaTime,0, 0));
+        }
+        if (Input.GetKey("d"))
+        {
+            //use jsons to translate your position to serverside, which will then translate the player in a direction
+            //translate
+            playerList[newID].transform.Translate(new Vector3(- 1 * Time.deltaTime,0, 0));
+        }
         DataStreamReader stream;
         NetworkEvent.Type cmd;
         cmd = m_Connection.PopEvent(m_Driver, out stream);
@@ -94,6 +183,7 @@ public class NetworkClient : MonoBehaviour
             if (cmd == NetworkEvent.Type.Connect)
             {
                 OnConnect();
+                
             }
             else if (cmd == NetworkEvent.Type.Data)
             {
@@ -103,7 +193,6 @@ public class NetworkClient : MonoBehaviour
             {
                 OnDisconnect();
             }
-
             cmd = m_Connection.PopEvent(m_Driver, out stream);
         }
     }
