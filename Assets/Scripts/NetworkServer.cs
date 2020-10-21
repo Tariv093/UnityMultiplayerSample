@@ -13,7 +13,7 @@ public class NetworkServer : MonoBehaviour
 {
     public NetworkDriver m_Driver;
     public ushort serverPort;
-    public GameObject playerObject;
+  //  public GameObject playerObject;
     private NativeList<NetworkConnection> m_Connections;
     public Dictionary<string, NetworkObjects.NetworkPlayer> clientPlayers = new Dictionary<string, NetworkObjects.NetworkPlayer>();
 
@@ -40,6 +40,8 @@ public class NetworkServer : MonoBehaviour
             foreach (KeyValuePair<string, NetworkObjects.NetworkPlayer> client in clientPlayers)
             {
                 m.players.Add(client.Value);
+                Debug.Log(" clientsIDs " + client.Key + " position " + client.Value.cubPos);
+               
 
             }
             for (int i = 0; i < m_Connections.Length; i++)
@@ -47,7 +49,7 @@ public class NetworkServer : MonoBehaviour
                SendToClient(JsonUtility.ToJson(m), m_Connections[i]);
 
             }
-            yield return new WaitForSeconds(0.5f);
+            yield return new WaitForSeconds(2f);
         }
     }
     void SendToClient(string message, NetworkConnection c){
@@ -71,6 +73,7 @@ public class NetworkServer : MonoBehaviour
         SendToClient(JsonUtility.ToJson(m), c);
 
         clientPlayers.Add(c.InternalId.ToString(), new NetworkObjects.NetworkPlayer());
+        clientPlayers[c.InternalId.ToString()].id = c.InternalId.ToString();
     }
 
     void OnData(DataStreamReader stream, int i){
@@ -91,6 +94,7 @@ public class NetworkServer : MonoBehaviour
             break;
             case Commands.SERVER_UPDATE:
             ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
+               
             Debug.Log("Server update message received!");
             break;
             default:
